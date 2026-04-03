@@ -15,7 +15,7 @@
 	<description>Demo project for Spring Boot</description>
 
 	<properties>
-		<java.version>17</java.version>
+		<java.version>11</java.version>
 		<!--			<java.version>1.8</java.version>-->
 		<!--			<java.version>17</java.version>-->
 	</properties>
@@ -24,6 +24,17 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.mybatis.spring.boot</groupId>
+			<artifactId>mybatis-spring-boot-starter</artifactId>
+			<version>2.3.2</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
 		</dependency>
 
 		<dependency>
@@ -42,6 +53,19 @@
 			<groupId>com.aliyun</groupId>
 			<artifactId>ocr_api20210707</artifactId>
 			<version>3.1.3</version>
+		</dependency>
+
+		<dependency>
+			<groupId>com.harium.supabase</groupId>
+			<artifactId>core</artifactId>
+			<version>0.0.1</version>
+		</dependency>
+
+		<!-- core 0.0.1 传递依赖声明了不存在的 postgrest 0.0.3，这里显式锁定到可用版本 -->
+		<dependency>
+			<groupId>com.harium.database</groupId>
+			<artifactId>postgrest</artifactId>
+			<version>0.0.2</version>
 		</dependency>
 	</dependencies>
 

@@ -98,6 +98,99 @@ Spring Boot适用的场景也非常广泛，如：Web应用程序开发、微服
 
 </development>
 
+## Supabase 集成
+
+项目已内置 Supabase Java SDK 集成（`com.harium.supabase:core`），可通过配置快速接入。
+
+### 1. 配置
+
+在 `src/main/resources/application.properties` 中设置：
+
+```properties
+supabase.url=https://your-project-ref.supabase.co
+supabase.anon-key=your-anon-key
+supabase.service-role-key=your-service-role-key
+```
+
+说明：
+
+- `supabase.service-role-key` 与 `supabase.anon-key` 二选一即可；若都设置，优先使用 `service-role-key`。
+- 生产环境建议通过环境变量或密钥管理系统注入，避免明文写入代码仓库。
+
+### 2. 接口
+
+- `GET /supabase/health`：检查 SDK 初始化与连接配置状态。
+- `GET /supabase/table/{table}?select=*&limit=10`：通过 SDK 查询表数据。
+
+### 3. Book 表 CRUD 示例
+
+假设 Supabase 中存在 `book` 表（例如字段：`id`、`title`、`author`、`price`）。
+
+- 查询列表：`GET /supabase/book?limit=10`
+- 查询单条：`GET /supabase/book/{id}`
+- 创建：`POST /supabase/book`
+- 更新：`PUT /supabase/book/{id}`
+- 删除：`DELETE /supabase/book/{id}`
+
+示例请求：
+
+```bash
+curl -X POST http://localhost:9000/supabase/book \
+	-H "Content-Type: application/json" \
+	-d '{"title":"Spring In Action","author":"Craig Walls","price":88.0}'
+
+curl http://localhost:9000/supabase/book?limit=10
+
+curl http://localhost:9000/supabase/book/1
+
+curl -X PUT http://localhost:9000/supabase/book/1 \
+	-H "Content-Type: application/json" \
+	-d '{"title":"Spring Boot Upgraded","price":99.0}'
+
+curl -X DELETE http://localhost:9000/supabase/book/1
+```
+
+## Supabase Postgres 直连 CRUD（MyBatis）
+
+项目已新增基于 MyBatis 的 `book` 表 CRUD，接口前缀：`/db/book`。
+
+### 1. 环境变量
+
+启动前建议设置：
+
+```bash
+export SUPABASE_DB_URL='jdbc:postgresql://db.qkfndglocfuzsjxlqkpl.supabase.co:5432/postgres?sslmode=require'
+export SUPABASE_DB_USER='postgres'
+export SUPABASE_DB_PASSWORD='YOUR-PASSWORD'
+```
+
+### 2. 接口
+
+- `GET /db/book`：查询全部
+- `GET /db/book/{id}`：按 id 查询
+- `POST /db/book`：新增
+- `PUT /db/book/{id}`：更新
+- `DELETE /db/book/{id}`：删除
+
+示例：
+
+```bash
+curl -X POST http://localhost:9000/db/book \
+	-H "Content-Type: application/json" \
+	-d '{"title":"Designing Data-Intensive Applications","author":"Martin Kleppmann","price":120.0}'
+
+curl http://localhost:9000/db/book
+
+curl http://localhost:9000/db/book/1
+
+curl -X PUT http://localhost:9000/db/book/1 \
+	-H "Content-Type: application/json" \
+	-d '{"price":99.0}'
+
+curl -X DELETE http://localhost:9000/db/book/1
+```
+
+
 
 
 
