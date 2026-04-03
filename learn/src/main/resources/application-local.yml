@@ -1,0 +1,32 @@
+# 本地 docker compose 环境覆盖配置
+# 启动方式：java -jar app.jar --spring.profiles.active=local
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/demo?ApplicationName=demo-app
+    username: postgres
+    password: postgres123
+
+  data:
+    mongodb:
+      uri: mongodb://root:mongo123@localhost:27017/demo?authSource=admin
+      database: demo
+    redis:
+      # 本地 Redis 不需要 SSL，使用 redis:// 协议
+      url: redis://default:redis123@localhost:6379
+      ssl:
+        enabled: false
+
+sentry:
+  dsn: ""   # 本地不上报
+
+vercel:
+  edge-config:
+    connection-string: ""  # 本地不拉取
+    refresh-interval-seconds: 3600
+
+logging:
+  level:
+    root: INFO
+    com.example.demo: DEBUG
+    org.mybatis: DEBUG

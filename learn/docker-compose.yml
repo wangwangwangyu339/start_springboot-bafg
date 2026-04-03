@@ -1,0 +1,112 @@
+version: "3.9"
+
+# ============================================================
+# 本地开发环境一键启动
+# 包含：PostgreSQL + MongoDB + Redis
+# 使用：docker compose up -d
+# ============================================================
+
+services:
+
+  # ── PostgreSQL 15 ──────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: demo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: demo
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/main/resources/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MongoDB 7 ──────────────────────────────────────────────
+  mongodb:
+    image: mongo:7-jammy
+    container_name: demo-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: mongo123
+      MONGO_INITDB_DATABASE: demo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis 7（本地替代 Upstash，不需要 SSL）─────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: demo-redis
+    restart: unless-stopped
+    command: redis-server --requirepass redis123
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis123", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Spring Boot App ────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: demo-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      # PostgreSQL（本地 docker compose，不需要 SSL）
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_DB: demo
+      PG_USER: postgres
+      PG_PASSWORD: postgres123
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/demo?ApplicationName=demo-app
+
+      # MongoDB
+      MONGODB_URI: mongodb://root:mongo123@mongodb:27017/demo?authSource=admin
+      MONGODB_DB: demo
+
+      # Redis 本地（redis:// 不需要 SSL）
+      REDIS_URL: redis://default:redis123@redis:6379
+
+      # 关闭 Sentry（本地开发）
+      SENTRY_DSN: ""
+
+      # Profile
+      SPRING_PROFILES_ACTIVE: development
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  mongo_data:
+  redis_data:

@@ -1,0 +1,160 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: demo-cloud-app
+
+  # ============================================================
+  # PostgreSQL 数据源（MyBatis）
+  # ============================================================
+  datasource:
+    url: jdbc:postgresql://${PG_HOST:localhost}:${PG_PORT:5432}/${PG_DB:demo}?sslmode=require&ApplicationName=demo-app
+    username: ${PG_USER:postgres}
+    password: ${PG_PASSWORD:your_pg_password}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      minimum-idle: 2
+      maximum-pool-size: 10
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      pool-name: HikariPool-Demo
+
+  # ============================================================
+  # MongoDB
+  # ============================================================
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb+srv://username:password@cluster0.example.mongodb.net/demo?retryWrites=true&w=majority}
+      database: ${MONGODB_DB:demo}
+
+  # ============================================================
+  # Upstash Redis（强制 SSL / TLS）
+  # ============================================================
+    redis:
+      url: ${REDIS_URL:rediss://default:your_upstash_token@your-endpoint.upstash.io:6379}
+      # rediss:// 协议自动开启SSL，无需额外配置
+      ssl:
+        enabled: true
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: -1ms
+      timeout: 5000ms
+      connect-timeout: 3000ms
+
+  # ============================================================
+  # Cache（Spring Cache 使用 Redis）
+  # ============================================================
+  cache:
+    type: redis
+    redis:
+      time-to-live: 3600000   # 1小时，毫秒
+      cache-names:
+        - users
+        - user_detail
+
+  # ============================================================
+  # Jackson
+  # ============================================================
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: NON_NULL
+
+# ============================================================
+# MyBatis
+# ============================================================
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.example.demo.entity.pg
+  configuration:
+    map-underscore-to-camel-case: true   # 驼峰命名自动转换
+    use-generated-keys: true
+    default-statement-timeout: 30
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+# ============================================================
+# Springdoc OpenAPI 3 / Swagger UI
+# ============================================================
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    tags-sorter: alpha
+    operations-sorter: alpha
+    try-it-out-enabled: true
+  show-actuator: false
+  default-produces-media-type: application/json
+
+# ============================================================
+# OpenFeign
+# ============================================================
+feign:
+  client:
+    config:
+      default:
+        connect-timeout: 5000
+        read-timeout: 10000
+        logger-level: BASIC
+  compression:
+    request:
+      enabled: true
+    response:
+      enabled: true
+
+# ============================================================
+# Vercel Edge Config
+# ============================================================
+vercel:
+  edge-config:
+    connection-string: ${EDGE_CONFIG:https://edge-config.vercel.com/your_edge_config_id?token=your_token}
+    refresh-interval-seconds: 60   # 本地缓存刷新间隔（秒）
+
+# ============================================================
+# Sentry 异常监控 + 性能追踪
+# ============================================================
+sentry:
+  dsn: ${SENTRY_DSN:https://your_sentry_key@o0000000.ingest.sentry.io/0000000}
+  environment: ${SPRING_PROFILES_ACTIVE:development}
+  traces-sample-rate: 1.0          # 生产环境建议 0.1~0.2
+  send-default-pii: false
+  max-breadcrumbs: 100
+  attach-threads: true
+  logging:
+    minimum-event-level: error
+    minimum-breadcrumb-level: info
+
+# ============================================================
+# Actuator
+# ============================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# ============================================================
+# 日志
+# ============================================================
+logging:
+  level:
+    root: INFO
+    com.example.demo: DEBUG
+    org.springframework.web: INFO
+    org.mybatis: DEBUG
+    feign: DEBUG
