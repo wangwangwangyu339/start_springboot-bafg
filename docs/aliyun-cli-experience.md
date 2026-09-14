@@ -208,3 +208,67 @@ export ALIBABA_CLOUD_ACCESS_KEY_SECRET=$(python3 -c "import json;d=json.load(ope
 # config.json 结构：{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":...,"access_key_secret":...,"region_id":...}]}
 ```
 > 规则：AK/SK 只进环境变量，不打印、不入文档/仓库。
+
+---
+
+## ECI 固定 EIP 绑定 + ACR workflow（2026-09-15 新增，spring-demo 实测）
+
+**核心结论：ECI 创建时指定已有 EIP，ECI 释放后 EIP 不释放、回到 Available**（只有 `--auto-create-eip true` 自动创建的 EIP 才随实例释放）。
+
+```bash
+# 1. 查询 EIP（注意 vpc 插件参数是 --biz-region-id，不是 --RegionId）
+aliyun vpc describe-eip-addresses --biz-region-id cn-hangzhou
+# → TotalCount / EipAddresses.EipAddress[]: IpAddress, Status(Available/InUse), AllocationId, InstanceId
+
+# 2. 创建 ECI 时绑定已有 EIP（替代 --auto-create-eip true + --eip-bandwidth/--eip-isp）
+aliyun eci create-container-group \
+  --biz-region-id cn-hangzhou \
+  --container-group-name spring-demo-eci-acr \
+  --compute-category economy \
+  --container '[...]' \
+  --vswitch-id vsw-xxx --security-group-id sg-xxx \
+  --eip-instance-id eip-bp1c8hnf12twltdjta1mr \
+  --restart-policy OnFailure
+
+# 3. 删 ECI 后 EIP 解绑有延迟，连续部署需先等它回 Available（最长 ~90s）
+#    aliyun vpc describe-eip-addresses --allocation-id <id> | jq -r '.EipAddresses.EipAddress[0].Status' == "Available"
+
+# 4. 安全组规则查询（ecs 插件参数 --biz-region-id；8080 入方向 0.0.0.0/0 Accept 才能公网访问）
+aliyun ecs describe-security-group-attribute --biz-region-id cn-hangzhou --security-group-id sg-xxx \
+  | jq -r '.Permissions.Permission[] | "\(.Direction) \(.IpProtocol) \(.PortRange) \(.SourceCidrIp) \(.Policy)"'
+```
+
+**ECI economy（经济型）规格红线**：1 vCPU 只支持 2/4/8 GiB 内存——请求 1C0.5G 直接报
+`FeatureBasedConstraintConflict: [vCPU ComputeCategory]`（400）。且 `--container` JSON 里
+`Memory` 单位是 **GiB**（不是 MB），写 512.0 = 512 GiB，会向上规整成超大规格（¥110 账单元凶）。
+
+**ACR 个人版（crpi-* 端点）要点**：
+- buildx 推送必须 `provenance: false` + `sbom: false`，否则报
+  `unknown manifest class for application/vnd.oci.empty.v1+json`；
+- 镜像仓库不支持推送时自动创建，需先在控制台建好（命名空间/仓库，私有）；
+- 仓库是否存在的校验（走 docker registry token 流，凭据=ACR 账号密码）：
+  ```bash
+  TOKEN=$(curl -s -u "<user>:<pass>" \
+    "https://dockerauth.cn-hangzhou.aliyuncs.com/auth?service=registry.aliyuncs.com:cn-hangzhou:<id>&scope=repository:<ns>/<repo>:pull" \
+    | jq -r .token)
+  curl -s -H "Authorization: Bearer $TOKEN" \
+    "https://crpi-xxx.cn-hangzhou.personal.cr.aliyuncs.com/v2/<ns>/<repo>/tags/list"
+  # 200=存在；{"errors":[{"code":"NAME_UNKNOWN"}]}=仓库不存在
+  ```
+- WWW-Authenticate 头里的 realm/service 才是真 token 端点（`curl -sI https://<registry>/v2/` 查看）。
+
+**GitHub Actions 相关（gh CLI 已用 PAT 重新认证）**：
+```bash
+gh secret set ACR_USERNAME --repo <owner>/<repo> --body "..."          # 设置 secret
+printf '%s' "$PASS" | gh secret set ACR_PASSWORD --repo <owner>/<repo> # 密码走 stdin，不进进程参数
+gh workflow run deploy-eci-acr.yml --repo <owner>/<repo> --ref dev     # 指定分支手动触发
+gh run view <id> --repo <owner>/<repo> --log-failed | tail -40         # 看失败步骤日志
+gh run list --repo <owner>/<repo> --workflow deploy-eci.yml -L 3 --json databaseId,status,conclusion
+```
+
+**冒烟测试教训**：curl 一次性探测 + `|| true` 会把"没连上"掩盖成成功（历史所有 run 都是 HTTP=000 假绿）。
+正确写法：重试直到两个端点都返回 HTTP 200（最多 ~3 分钟），超时 `exit 1` 让步骤真实失败。
+
+**当前 EIP 用途更新**：`eip-bp1c8hnf12twltdjta1mr`（120.26.142.177 / eip-dev-5m，5M 按量）
+已改为 spring-demo ECI workflow 的固定公网 IP（创建 ECI 时绑定，跑完自动解绑回 Available）；
+此前绑定的抢占式 ECS i-bp18r2q6jfdvg0r6ev47 已不占用该 EIP。
