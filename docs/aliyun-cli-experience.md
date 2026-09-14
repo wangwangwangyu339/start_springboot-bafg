@@ -174,3 +174,37 @@ aliyun sls get-logs --project=webframework-log-d654d2 --logstore=app-log \
 凭证走环境变量 `ALIBABA_CLOUD_ACCESS_KEY_ID/SECRET`（兼容 STS `ALIBABA_CLOUD_SECURITY_TOKEN`）；
 字段约定：顶层 `level/message/traceId(long)/device`，`detail` 为不建索引的 JSON。
 详见 spring-demo 仓库 `docs/integration-experience.md` 第 4 节。
+
+---
+
+## ECI 镜像缓存（2026-09-15 新增，已在杭州 region 实测）
+
+**查询镜像缓存**：
+```bash
+aliyun eci DescribeImageCaches --RegionId cn-hangzhou
+# 输出 ImageCaches[]：ImageCacheId / ImageCacheName / Status / ImageCacheSize / CreationTime / Images
+```
+
+**删除镜像缓存**（按 ID，逐个删，返回 RequestId 即成功）：
+```bash
+aliyun eci DeleteImageCache --RegionId cn-hangzhou --ImageCacheId imc-xxxxxxxxx
+```
+
+**自动缓存堆积的原因**：workflow 每次 push 用新 commit SHA 当镜像 tag → ECI 自动匹配
+（AutoMatchImageCache）匹配不到 → 每次自动新建 `auto-create-for-*` 缓存。5 次部署 = 5 个缓存。
+清理后下次部署仍会新建，属正常行为；介意配额可定期批量清理（`DescribeImageCaches` 先列出 → 循环 `DeleteImageCache`）。
+
+**计费要点（重要，2026-08 官方文档）**：
+- 手动创建：创建时收「临时资源费（2vCPU/4GiB 实例+ESSD，按秒）+ 快照存储费（保留多久收多久）」；使用时按容量挂按量云盘收费。
+- 自动创建（auto-create-for-*）：**创建免费**；**单个缓存 ≤30 GiB 使用免费**（>30 GiB 才对超出部分收临时存储费）；
+  保留由阿里云托管（未用 7 天删 / 闲置超 30 天删），无长期快照费。
+- 30 GiB 按**单个缓存**判断，不是所有缓存加总。
+- 计费归属：实例费+临时存储费 → 弹性容器实例账单；云盘费+快照费 → 块存储账单。
+
+**本机 AK 注入环境变量（本地验证 SLS 等，不打印密钥）**：
+```bash
+export ALIBABA_CLOUD_ACCESS_KEY_ID=$(python3 -c "import json;d=json.load(open('$HOME/.aliyun/config.json'));p=[x for x in d['profiles'] if x['name']=='default'][0];print(p['access_key_id'])")
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET=$(python3 -c "import json;d=json.load(open('$HOME/.aliyun/config.json'));p=[x for x in d['profiles'] if x['name']=='default'][0];print(p['access_key_secret'])")
+# config.json 结构：{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":...,"access_key_secret":...,"region_id":...}]}
+```
+> 规则：AK/SK 只进环境变量，不打印、不入文档/仓库。
