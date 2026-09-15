@@ -272,3 +272,14 @@ gh run list --repo <owner>/<repo> --workflow deploy-eci.yml -L 3 --json database
 **当前 EIP 用途更新**：`eip-bp1c8hnf12twltdjta1mr`（120.26.142.177 / eip-dev-5m，5M 按量）
 已改为 spring-demo ECI workflow 的固定公网 IP（创建 ECI 时绑定，跑完自动解绑回 Available）；
 此前绑定的抢占式 ECS i-bp18r2q6jfdvg0r6ev47 已不占用该 EIP。
+
+## 2026-09-15 MongoDB Atlas 连接失败根因：Network Access 白名单（重要）
+
+- 现象：MongoDB Atlas 集群（cluster0.o1bvw8t，香港 AWS 159.143.x.x）从本机/杭州 ECS/杭州 ECI/新加坡 ECS 全部 TCP 通、TLS 握手失败 `TLSV1_ALERT_INTERNAL_ERROR`（alert 80），一度误判为"大陆→香港 AWS 被干扰"。
+- 真相：**Atlas 免费集群默认 Network Access 白名单不含测试出口 IP，Atlas 在 TLS 握手层直接丢 alert 拒绝**。三渠道一致失败 = 出口 IP 都不在白名单。
+- 解法：Atlas 控制台 → Network Access → Add IP Address 加 `0.0.0.0/0`，保存后**无需等**，本机/杭州 ECS/新加坡 ECS 三渠道同时恢复（TLSv1.3 + ping + insert/readback/cleanup 全过）。
+- 经验：
+  1. Atlas TLS alert 80（internal error）优先查 Network Access 白名单，别先怀疑网络/干扰。
+  2. 跨云验证用 mongosh（官方 shell，tar 解压即用）：`downloads.mongodb.com/compass/mongosh-2.4.2-linux-x64.tgz`，比装 pymongo/venv 快。
+  3. 新加坡临时验证机（t6-c1m1.large 抢占式 0.03）：创建 → 经杭州中转 SSH → 验证完 Stop→Stopped→DeleteInstance（不加 --Force），全程 <10 分钟，花费 <0.1 元。
+  4. 账号余额不足（InvalidAccountStatus.NotEnoughBalance）时按量/抢占式都下单失败，充值后立即恢复，无需改参数。
